@@ -59,7 +59,8 @@ ANIMAL_FACINGS = [
 # If there are multiple checkpoints, specify the intended file, for example:
 # MODEL_PATH = Path("models/my_yolo26n_14cls_best.pt")
 # Absolute paths are also accepted.
-MODEL_PATH: Path | None = Path("models\yolo26n_14cls_v7_best.pt")
+#MODEL_PATH: Path | None = Path("models\yolo26n_14cls_v7_best.pt")
+MODEL_PATH: Path | None = None
 
 # None means: use the class names stored in the selected checkpoint.
 # This is the recommended setting, including when switching between 14-class
@@ -91,7 +92,7 @@ CLASS_NAMES_OVERRIDE: dict[int, str] | None = None
 # Example: TARGET_CLASS_IDS = {8, 11, 12, 13}
 # Only use IDs that exist in the selected checkpoint.
 TARGET_CLASS_IDS: set[int] | None = {8}
-
+COCO_TARGET_CLASS_IDS = {21}
 # CPU inference settings
 YOLO_IMAGE_SIZE = 320
 INFERENCE_DEVICE = "cpu"
@@ -142,35 +143,29 @@ def resolve_model_path() -> Path:
             )
         return path
 
-    if not MODEL_DIRECTORY.is_dir():
-        raise FileNotFoundError(
-            f"Model directory does not exist: {MODEL_DIRECTORY}\n"
-            "Create the models/ directory and place the intended .pt file there, "
-            "or set MODEL_PATH near the top of this script."
+    if MODEL_DIRECTORY.is_dir():
+        candidates = sorted(
+            path.resolve()
+            for path in MODEL_DIRECTORY.glob("*.pt")
+            if path.is_file()
         )
 
-    candidates = sorted(
-        path.resolve()
-        for path in MODEL_DIRECTORY.glob("*.pt")
-        if path.is_file()
-    )
+        if len(candidates) == 1:
+            return candidates[0]
 
-    if len(candidates) == 0:
-        raise FileNotFoundError(
-            f"No .pt checkpoint was found in: {MODEL_DIRECTORY}\n"
-            "Place the intended YOLO26n checkpoint in models/, "
-            "or set MODEL_PATH near the top of this script."
-        )
+        if len(candidates) > 1:
+            candidate_list = "\n".join(f"  - {path}" for path in candidates)
+            raise RuntimeError(
+                "Multiple .pt checkpoints were found. Do not select one implicitly.\n"
+                f"{candidate_list}\n"
+                "Set MODEL_PATH explicitly near the top of this script."
+            )
 
-    if len(candidates) > 1:
-        candidate_list = "\n".join(f"  - {path}" for path in candidates)
-        raise RuntimeError(
-            "Multiple .pt checkpoints were found. Do not select one implicitly.\n"
-            f"{candidate_list}\n"
-            "Set MODEL_PATH explicitly near the top of this script."
-        )
-
-    return candidates[0]
+    # 有効なローカルファイルが見つからない場合のフォールバック
+    print("No valid local YOLO checkpoint found. Falling back to 'yolo26n.pt' (auto-download).")
+    global TARGET_CLASS_IDS, COCO_TARGET_CLASS_IDS
+    TARGET_CLASS_IDS = COCO_TARGET_CLASS_IDS
+    return "yolo26n.pt"
 
 
 def normalize_model_names(raw_names: Any) -> dict[int, str]:
